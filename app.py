@@ -1,21 +1,25 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from yt_dlp import YoutubeDL
 import subprocess
 import os
 
 app = Flask(__name__)
 
-# Temporary folder banayein (agar nahi hai toh)
-if not os.path.exists('temp'):
-    os.makedirs('temp')
+# Static directory create karein
+if not os.path.exists('static'):
+    os.makedirs('static')
 
-# M3U8 stream extract karein (cookies aur headers ke sath)
+# FFmpeg ka path set karein
+FFMPEG_PATH = "/usr/bin/ffmpeg"
+os.environ["PATH"] += os.pathsep + os.path.dirname(FFMPEG_PATH)
+
+# M3U8 Stream Extract Function
 def extract_m3u8_url(video_url):
     ydl_opts = {
-        'format': 'best',  # Best quality ka stream extract karein
-        'quiet': True,     # Logs ko suppress karein
-        'cookiefile': 'cookies.txt',  # Cookies file ka use karein
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',  # User-Agent
+        'format': 'best',
+        'quiet': True,
+        'cookiefile': 'cookies.txt',
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
         'headers': {
             'Referer': 'https://www.youtube.com/',
             'Origin': 'https://www.youtube.com',
@@ -26,25 +30,17 @@ def extract_m3u8_url(video_url):
             info = ydl.extract_info(video_url, download=False)
             formats = info.get('formats', [])
             for f in formats:
-                if f.get('protocol') == 'm3u8':  # M3U8 stream dhoondhein
+                if f.get('protocol') == 'm3u8':
                     return f['url']
-            # Agar M3U8 stream nahi mila, toh best format ka URL return karein
             return info['url']
     except Exception as e:
-        print(f"Error extracting M3U8 stream: {e}")
         return None
 
-# MP4 format mein convert karein
+# MP4 Conversion Function
 def convert_to_mp4(m3u8_url, output_file):
-    command = [
-        'ffmpeg',
-        '-i', m3u8_url,  # Input M3U8 URL
-        '-c', 'copy',    # Copy codec (no re-encoding)
-        output_file      # Output MP4 file
-    ]
+    command = [FFMPEG_PATH, '-i', m3u8_url, '-c', 'copy', f'static/{output_file}']
     subprocess.run(command, check=True)
 
-# Download endpoint
 @app.route("/")
 def home():
     return "Flask App is Running!"
@@ -56,20 +52,20 @@ def download_video():
         return jsonify({"error": "URL parameter is required"}), 400
 
     try:
-        # M3U8 stream extract karein
         m3u8_url = extract_m3u8_url(video_url)
         if not m3u8_url:
             return jsonify({"error": "Could not extract M3U8 stream"}), 500
 
-        # MP4 format mein convert karein
-        output_file = "temp/output.mp4"
+        output_file = "output.mp4"
         convert_to_mp4(m3u8_url, output_file)
 
-        # Download link banayein
-        download_link = f"http://your-domain.com/{output_file}"
-        return jsonify({"download_link": download_link})
+        return jsonify({"download_link": f"https://your-app.onrender.com/static/output.mp4"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/download/<filename>')
+def serve_file(filename):
+    return send_from_directory('static', filename)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
