@@ -45,6 +45,10 @@ def convert_to_mp4(m3u8_url, output_file):
     subprocess.run(command, check=True)
 
 # Download endpoint
+@app.route("/")
+def home():
+    return "Flask App is Running!"
+
 @app.route('/download', methods=['GET'])
 def download_video()
     video_url = request.args.get('url')
