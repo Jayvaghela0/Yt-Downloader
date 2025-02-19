@@ -38,7 +38,9 @@ def convert_m3u8_to_mp4(m3u8_url, output_file):
     ]
     subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return output_file
-
+@app.route('/')
+def home():
+    return "Welcome to YouTube Video Downloader! Use /download?url=YOUTUBE_URL to download videos."
 @app.route("/extract", methods=["GET"])
 def extract():
     video_url = request.args.get("url")
