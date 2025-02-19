@@ -1,77 +1,66 @@
-from flask import Flask, request, jsonify, send_file
-import yt_dlp
-import os
+from flask import Flask, request, jsonify
+from yt_dlp import YoutubeDL
 import subprocess
-import time
+import os
 
 app = Flask(__name__)
 
-# Ensure cookies.txt is present
-COOKIES_PATH = "cookies.txt"
-if not os.path.exists(COOKIES_PATH):
-    raise FileNotFoundError("cookies.txt file is missing. Upload it to the same folder.")
+# Temporary folder banayein (agar nahi hai toh)
+if not os.path.exists('temp'):
+    os.makedirs('temp')
 
-DOWNLOAD_FOLDER = "downloads"
-os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
-
-# Function to extract M3U8 stream
-def extract_m3u8(video_url):
+# M3U8 stream extract karein (cookies aur headers ke sath)
+def extract_m3u8_url(video_url):
     ydl_opts = {
-        'quiet': True,
-        'noplaylist': True,
-        'format': 'best',
-        'skip_download': True,
-        'cookies': COOKIES_PATH  # Using cookies.txt
+        'format': 'best',  # Best quality ka stream extract karein
+        'quiet': True,     # Logs ko suppress karein
+        'cookiefile': 'cookies.txt',  # Cookies file ka use karein
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',  # User-Agent
+        'headers': {
+            'Referer': 'https://www.youtube.com/',
+            'Origin': 'https://www.youtube.com',
+        },
     }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+    with YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(video_url, download=False)
-        formats = info.get("formats", [])
+        formats = info.get('formats', [])
         for f in formats:
-            if "m3u8" in f["url"]:
-                return f["url"]
+            if f.get('protocol') == 'm3u8':  # M3U8 stream dhoondhein
+                return f['url']
     return None
 
-# Function to convert M3U8 to MP4
-def convert_m3u8_to_mp4(m3u8_url, output_file):
+# MP4 format mein convert karein
+def convert_to_mp4(m3u8_url, output_file):
     command = [
-        "ffmpeg", "-i", m3u8_url, "-c", "copy", "-bsf:a", "aac_adtstoasc", output_file
+        'ffmpeg',
+        '-i', m3u8_url,  # Input M3U8 URL
+        '-c', 'copy',    # Copy codec (no re-encoding)
+        output_file      # Output MP4 file
     ]
-    subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    return output_file
-@app.route('/')
-def home():
-    return "Welcome to YouTube Video Downloader! Use /download?url=YOUTUBE_URL to download videos."
-@app.route("/extract", methods=["GET"])
-def extract():
-    video_url = request.args.get("url")
+    subprocess.run(command, check=True)
+
+# Download endpoint
+@app.route('/download', methods=['GET'])
+def download_video():
+    video_url = request.args.get('url')
     if not video_url:
-        return jsonify({"error": "URL is required"}), 400
+        return jsonify({"error": "URL parameter is required"}), 400
 
-    m3u8_url = extract_m3u8(video_url)
-    if not m3u8_url:
-        return jsonify({"error": "Failed to extract M3U8 stream"}), 500
+    try:
+        # M3U8 stream extract karein
+        m3u8_url = extract_m3u8_url(video_url)
+        if not m3u8_url:
+            return jsonify({"error": "Could not extract M3U8 stream"}), 500
 
-    return jsonify({"m3u8_url": m3u8_url})
+        # MP4 format mein convert karein
+        output_file = "temp/output.mp4"
+        convert_to_mp4(m3u8_url, output_file)
 
-@app.route("/convert", methods=["GET"])
-def convert():
-    m3u8_url = request.args.get("m3u8_url")
-    if not m3u8_url:
-        return jsonify({"error": "M3U8 URL is required"}), 400
+        # Download link banayein
+        download_link = f"http://your-domain.com/{output_file}"
+        return jsonify({"download_link": download_link})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-    timestamp = int(time.time())
-    output_file = f"{DOWNLOAD_FOLDER}/{timestamp}.mp4"
-
-    convert_m3u8_to_mp4(m3u8_url, output_file)
-
-    return jsonify({"download_link": f"/get_video/{timestamp}.mp4"})
-
-@app.route("/get_video/<filename>")
-def get_video(filename):
-    file_path = os.path.join(DOWNLOAD_FOLDER, filename)
-    if os.path.exists(file_path):
-        return send_file(file_path, as_attachment=True)
-    return jsonify({"error": "File not found"}), 404
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
