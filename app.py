@@ -21,13 +21,18 @@ def extract_m3u8_url(video_url):
             'Origin': 'https://www.youtube.com',
         },
     }
-    with YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(video_url, download=False)
-        formats = info.get('formats', [])
-        for f in formats:
-            if f.get('protocol') == 'm3u8':  # M3U8 stream dhoondhein
-                return f['url']
-    return None
+    try:
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(video_url, download=False)
+            formats = info.get('formats', [])
+            for f in formats:
+                if f.get('protocol') == 'm3u8':  # M3U8 stream dhoondhein
+                    return f['url']
+            # Agar M3U8 stream nahi mila, toh best format ka URL return karein
+            return info['url']
+    except Exception as e:
+        print(f"Error extracting M3U8 stream: {e}")
+        return None
 
 # MP4 format mein convert karein
 def convert_to_mp4(m3u8_url, output_file):
@@ -40,11 +45,6 @@ def convert_to_mp4(m3u8_url, output_file):
     subprocess.run(command, check=True)
 
 # Download endpoint
-
-@app.route('/')
-def home():
-    return "Welcome to YouTube Video Downloader! Use /download?url=YOUTUBE_URL to download videos."
-    
 @app.route('/download', methods=['GET'])
 def download_video():
     video_url = request.args.get('url')
