@@ -47,6 +47,7 @@ def convert_to_mp4(m3u8_url, output_file):
 # Download endpoint
 @app.route('/download', methods=['GET'])
 def download_video():
+    return "welcome"
     video_url = request.args.get('url')
     if not video_url:
         return jsonify({"error": "URL parameter is required"}), 400
