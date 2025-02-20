@@ -1,25 +1,39 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify
 from yt_dlp import YoutubeDL
 import os
+import requests
 
 app = Flask(__name__)
 
-# Temporary folder create karein
-if not os.path.exists('temp'):
-    os.makedirs('temp')
+# Google reCAPTCHA Secret Key
+RECAPTCHA_SECRET_KEY = "YOUR_SECRET_KEY"
+
+# reCAPTCHA Verification Function
+def verify_recaptcha(token):
+    url = "https://www.google.com/recaptcha/api/siteverify"
+    data = {
+        "secret": RECAPTCHA_SECRET_KEY,
+        "response": token
+    }
+    try:
+        result = requests.post(url, data=data).json()
+        return result.get("success", False)
+    except Exception as e:
+        print("reCAPTCHA verification failed:", e)
+        return False
 
 # Direct MP4 Extract Function (Embed Trick Use Karke)
 def extract_mp4_url(video_url):
     ydl_opts = {
-        'format': 'bestvideo+bestaudio/best',  # Best MP4 format choose karega
+        'format': 'bestvideo+bestaudio/best',
         'quiet': True,
-        'cookiefile': 'cookies.txt',  # Agar login required ho toh cookies use karein
-        'referer': 'https://www.youtube.com/embed/',  # Embed trick
+        'cookiefile': 'cookies.txt',
+        'referer': 'https://www.youtube.com/embed/',  
     }
     try:
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=False)
-            return info.get('url')  # Direct MP4 URL return karega
+            return info.get('url')
     except Exception as e:
         print(f"Error extracting MP4 URL: {e}")
         return None
@@ -28,11 +42,17 @@ def extract_mp4_url(video_url):
 def home():
     return "Flask App is Running!"
 
-@app.route('/get_mp4', methods=['GET'])
+@app.route('/get_mp4', methods=['POST'])
 def get_mp4():
-    video_url = request.args.get('url')
-    if not video_url:
-        return jsonify({"error": "YouTube URL required"}), 400
+    data = request.json
+    video_url = data.get("url")
+    recaptcha_token = data.get("recaptcha_token")
+
+    if not video_url or not recaptcha_token:
+        return jsonify({"error": "YouTube URL and reCAPTCHA token required"}), 400
+
+    if not verify_recaptcha(recaptcha_token):
+        return jsonify({"error": "reCAPTCHA verification failed"}), 403
 
     mp4_url = extract_mp4_url(video_url)
     if not mp4_url:
