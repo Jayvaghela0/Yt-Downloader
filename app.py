@@ -1,9 +1,11 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS  # CORS Import kiya
 from yt_dlp import YoutubeDL
 import os
 import requests
 
 app = Flask(__name__)
+CORS(app)  # Flask app ke liye CORS enable kiya
 
 # Google reCAPTCHA Secret Key
 RECAPTCHA_SECRET_KEY = "6LcAy9wqAAAAAIDpw8ywJb85n6UvmVYWq87N5w4s"
@@ -11,10 +13,7 @@ RECAPTCHA_SECRET_KEY = "6LcAy9wqAAAAAIDpw8ywJb85n6UvmVYWq87N5w4s"
 # reCAPTCHA Verification Function
 def verify_recaptcha(token):
     url = "https://www.google.com/recaptcha/api/siteverify"
-    data = {
-        "secret": RECAPTCHA_SECRET_KEY,
-        "response": token
-    }
+    data = {"secret": RECAPTCHA_SECRET_KEY, "response": token}
     try:
         result = requests.post(url, data=data).json()
         return result.get("success", False)
@@ -40,7 +39,7 @@ def extract_mp4_url(video_url):
 
 @app.route("/")
 def home():
-    return "Flask App is Running!"
+    return "Flask App is Running with CORS!"
 
 @app.route('/get_mp4', methods=['POST'])
 def get_mp4():
@@ -61,6 +60,5 @@ def get_mp4():
     return jsonify({"mp4_url": mp4_url})
 
 if __name__ == '__main__':
-
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
