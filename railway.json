@@ -1,0 +1,14 @@
+{
+  "build": {
+    "builder": "python",
+    "buildCommand": "pip install -r requirements.txt"
+  },
+  "deploy": {
+    "startCommand": "gunicorn app:app",
+    "restartPolicyType": "ON_FAILURE"
+  },
+  "env": {
+    "PORT": "5000",
+    "RECAPTCHA_SECRET_KEY": "YOUR_SECRET_KEY"
+  }
+}
