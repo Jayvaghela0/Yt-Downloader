@@ -6,7 +6,7 @@ import requests
 app = Flask(__name__)
 
 # Google reCAPTCHA Secret Key
-RECAPTCHA_SECRET_KEY = "YOUR_SECRET_KEY"
+RECAPTCHA_SECRET_KEY = "6LcAy9wqAAAAAIDpw8ywJb85n6UvmVYWq87N5w4s"
 
 # reCAPTCHA Verification Function
 def verify_recaptcha(token):
