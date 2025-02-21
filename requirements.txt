@@ -1,6 +1,6 @@
-Flask==2.3.2
+Flask==3.0.2
 yt-dlp==2025.2.19
-Flask-CORS
-gunicorn==20.1.0
+Flask-CORS==5.0.0
+gunicorn==23.0.0
 requests
 cloudflare
