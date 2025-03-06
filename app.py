@@ -10,7 +10,7 @@ CORS(app)
 
 DOWNLOAD_FOLDER = "downloads"
 COOKIES_FILE = "cookies.txt"
-BACKEND_URL = "https://your-app.onrender.com"  # ✅ Apna backend URL daalo
+BACKEND_URL = "https://yt-downloader-e6db.onrender.com"  # ✅ Apna backend URL daalo
 
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
