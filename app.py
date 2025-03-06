@@ -10,7 +10,7 @@ CORS(app)
 
 DOWNLOAD_FOLDER = "downloads"
 COOKIES_FILE = "cookies.txt"
-BACKEND_URL = "https://yt-downloader-e6db.onrender.com"  # ✅ Apna backend URL daalo
+BACKEND_URL = "https://your-app.onrender.com"  # ✅ Apna backend URL
 
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
@@ -24,12 +24,9 @@ download_tasks = {}
 
 def delete_after_delay(file_path, delay=300):
     time.sleep(delay)
-    try:
-        if os.path.exists(file_path):
-            os.remove(file_path)
-            print(f"Deleted: {file_path}")
-    except Exception as e:
-        print(f"Error deleting file: {e}")
+    if os.path.exists(file_path):
+        os.remove(file_path)
+        print(f"Deleted: {file_path}")
 
 @app.route("/")
 def home():
@@ -69,7 +66,7 @@ def download_video_task(video_url, format_id, video_id):
             "cookiefile": COOKIES_FILE,
             "http_headers": HEADERS,
             "noprogress": True,
-            "merge_output_format": "mp4",  # ✅ Fix: Ensure MP4 output
+            "merge_output_format": "mp4",
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
