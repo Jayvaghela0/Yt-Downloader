@@ -1,64 +1,118 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS  # CORS Import kiya
-from yt_dlp import YoutubeDL
+from flask import Flask, request, jsonify, send_file
+from flask_cors import CORS
+import yt_dlp
 import os
-import requests
+import threading
+import time
 
 app = Flask(__name__)
-CORS(app)  # Flask app ke liye CORS enable kiya
+CORS(app)
 
-# Google reCAPTCHA Secret Key
-RECAPTCHA_SECRET_KEY = "6LcAy9wqAAAAAIDpw8ywJb85n6UvmVYWq87N5w4s"
+DOWNLOAD_FOLDER = "downloads"
+COOKIES_FILE = "cookies.txt"
+BACKEND_URL = "https://your-app.onrender.com"  # ✅ Apna backend URL daalo
 
-# reCAPTCHA Verification Function
-def verify_recaptcha(token):
-    url = "https://www.google.com/recaptcha/api/siteverify"
-    data = {"secret": RECAPTCHA_SECRET_KEY, "response": token}
+os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.youtube.com/",
+}
+
+download_tasks = {}
+
+def delete_after_delay(file_path, delay=300):
+    time.sleep(delay)
     try:
-        result = requests.post(url, data=data).json()
-        return result.get("success", False)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            print(f"Deleted: {file_path}")
     except Exception as e:
-        print("reCAPTCHA verification failed:", e)
-        return False
-
-# Direct MP4 Extract Function (Embed Trick Use Karke)
-def extract_mp4_url(video_url):
-    ydl_opts = {
-        'format': 'bestvideo+bestaudio/best',
-        'quiet': True,
-        'cookiefile': 'cookies.txt',
-        'referer': 'https://www.youtube.com/embed/',  
-    }
-    try:
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=False)
-            return info.get('url')
-    except Exception as e:
-        print(f"Error extracting MP4 URL: {e}")
-        return None
+        print(f"Error deleting file: {e}")
 
 @app.route("/")
 def home():
-    return "Flask App is Running with CORS!"
+    return "YouTube Video Downloader is Running!"
 
-@app.route('/get_mp4', methods=['POST'])
-def get_mp4():
-    data = request.json
-    video_url = data.get("url")
-    recaptcha_token = data.get("recaptcha_token")
+@app.route("/get_formats", methods=["GET"])
+def get_formats():
+    url = request.args.get("url")
+    if not url:
+        return jsonify({"error": "URL required"}), 400
 
-    if not video_url or not recaptcha_token:
-        return jsonify({"error": "YouTube URL and reCAPTCHA token required"}), 400
+    try:
+        ydl_opts = {
+            "cookiefile": COOKIES_FILE,
+            "http_headers": HEADERS,
+            "noprogress": True,
+        }
 
-    if not verify_recaptcha(recaptcha_token):
-        return jsonify({"error": "reCAPTCHA verification failed"}), 403
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            formats = [
+                {"format_id": f["format_id"], "resolution": f["format_note"], "ext": f["ext"]}
+                for f in info["formats"]
+                if f.get("vcodec") != "none" and f.get("acodec") == "none"
+            ]
 
-    mp4_url = extract_mp4_url(video_url)
-    if not mp4_url:
-        return jsonify({"error": "MP4 URL extraction failed"}), 500
+        return jsonify({"title": info["title"], "formats": formats})
 
-    return jsonify({"mp4_url": mp4_url})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+def download_video_task(video_url, format_id, video_id):
+    try:
+        ydl_opts = {
+            "format": format_id,
+            "outtmpl": f"{DOWNLOAD_FOLDER}/%(title)s.%(ext)s",
+            "cookiefile": COOKIES_FILE,
+            "http_headers": HEADERS,
+            "noprogress": True
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(video_url, download=True)
+            file_path = ydl.prepare_filename(info)
+
+        threading.Thread(target=delete_after_delay, args=(file_path, 300)).start()
+        
+        download_tasks[video_id] = {
+            "status": "completed",
+            "title": info["title"],
+            "download_link": f"{BACKEND_URL}/file/{os.path.basename(file_path)}"
+        }
+
+    except Exception as e:
+        download_tasks[video_id] = {"status": "failed", "error": str(e)}
+
+@app.route("/download", methods=["GET"])
+def start_download():
+    url = request.args.get("url")
+    format_id = request.args.get("format")
+
+    if not url or not format_id:
+        return jsonify({"error": "URL and format required"}), 400
+
+    video_id = str(int(time.time()))
+    download_tasks[video_id] = {"status": "processing"}
+
+    threading.Thread(target=download_video_task, args=(url, format_id, video_id)).start()
+
+    return jsonify({"task_id": video_id, "status": "started"})
+
+@app.route("/status/<task_id>")
+def check_status(task_id):
+    if task_id in download_tasks:
+        return jsonify(download_tasks[task_id])
+    return jsonify({"error": "Task not found"}), 404
+
+@app.route("/file/<filename>")
+def serve_file(filename):
+    file_path = os.path.join(DOWNLOAD_FOLDER, filename)
+    if os.path.exists(file_path):
+        return send_file(file_path, as_attachment=True)
+    return jsonify({"error": "File not found"}), 404
+
+if __name__ == "__main__":
+    app.run(debug=True)
