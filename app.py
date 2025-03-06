@@ -10,7 +10,7 @@ CORS(app)
 
 DOWNLOAD_FOLDER = "downloads"
 COOKIES_FILE = "cookies.txt"
-BACKEND_URL = "https://yt-downloader-e6db.onrender.com"  # ✅ Apna backend URL daalo
+BACKEND_URL = "https://your-app.onrender.com"  # ✅ Apna backend URL daalo
 
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
@@ -51,7 +51,7 @@ def get_formats():
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             formats = [
-                {"format_id": f["format_id"], "resolution": f["format_note"], "ext": f["ext"]}
+                {"format_id": f["format_id"], "resolution": f.get("format_note", "Unknown"), "ext": f["ext"]}
                 for f in info["formats"]
                 if f.get("vcodec") != "none" and f.get("acodec") == "none"
             ]
@@ -68,7 +68,8 @@ def download_video_task(video_url, format_id, video_id):
             "outtmpl": f"{DOWNLOAD_FOLDER}/%(title)s.%(ext)s",
             "cookiefile": COOKIES_FILE,
             "http_headers": HEADERS,
-            "noprogress": True
+            "noprogress": True,
+            "merge_output_format": "mp4",  # ✅ Fix: Ensure MP4 output
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
