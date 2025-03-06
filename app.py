@@ -10,7 +10,7 @@ CORS(app)
 
 DOWNLOAD_FOLDER = "downloads"
 COOKIES_FILE = "cookies.txt"
-BACKEND_URL = "https://ytjbv.onrender.com"  # ✅ Apna backend URL manually likho
+BACKEND_URL = "https://yt-downloader-e6db.onrender.com"  # ✅ Apna backend URL manually likho
 
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
