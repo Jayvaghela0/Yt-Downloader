@@ -10,7 +10,7 @@ CORS(app)
 
 DOWNLOAD_FOLDER = "downloads"
 COOKIES_FILE = "cookies.txt"
-BACKEND_URL = "https://your-app.onrender.com"  # ✅ Apna backend URL
+BACKEND_URL = "https://ytjbv.onrender.com"  # ✅ Apna backend URL manually likho
 
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
@@ -24,49 +24,21 @@ download_tasks = {}
 
 def delete_after_delay(file_path, delay=300):
     time.sleep(delay)
-    if os.path.exists(file_path):
-        os.remove(file_path)
-        print(f"Deleted: {file_path}")
-
-@app.route("/")
-def home():
-    return "YouTube Video Downloader is Running!"
-
-@app.route("/get_formats", methods=["GET"])
-def get_formats():
-    url = request.args.get("url")
-    if not url:
-        return jsonify({"error": "URL required"}), 400
-
     try:
-        ydl_opts = {
-            "cookiefile": COOKIES_FILE,
-            "http_headers": HEADERS,
-            "noprogress": True,
-        }
-
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            formats = [
-                {"format_id": f["format_id"], "resolution": f.get("format_note", "Unknown"), "ext": f["ext"]}
-                for f in info["formats"]
-                if f.get("vcodec") != "none" and f.get("acodec") == "none"
-            ]
-
-        return jsonify({"title": info["title"], "formats": formats})
-
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            print(f"Deleted: {file_path}")
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"Error deleting file: {e}")
 
 def download_video_task(video_url, format_id, video_id):
     try:
         ydl_opts = {
-            "format": format_id,
+            "format": format_id,  # ✅ Ye ensure karega ki format_id use ho raha hai
             "outtmpl": f"{DOWNLOAD_FOLDER}/%(title)s.%(ext)s",
             "cookiefile": COOKIES_FILE,
             "http_headers": HEADERS,
-            "noprogress": True,
-            "merge_output_format": "mp4",
+            "noprogress": True
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -84,13 +56,39 @@ def download_video_task(video_url, format_id, video_id):
     except Exception as e:
         download_tasks[video_id] = {"status": "failed", "error": str(e)}
 
+@app.route("/")
+def home():
+    return "YouTube Video Downloader is Running!"
+
+@app.route("/get_formats", methods=["GET"])
+def get_formats():
+    url = request.args.get("url")
+    if not url:
+        return jsonify({"error": "URL required"}), 400
+
+    try:
+        ydl_opts = {
+            "cookiefile": COOKIES_FILE,
+            "http_headers": HEADERS
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            formats = [
+                {"format_id": f["format_id"], "resolution": f.get("height", "Unknown"), "ext": f["ext"]}
+                for f in info.get("formats", []) if f.get("height")
+            ]
+        return jsonify({"formats": formats})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/download", methods=["GET"])
 def start_download():
     url = request.args.get("url")
-    format_id = request.args.get("format")
+    format_id = request.args.get("format_id")  # ✅ Fix: Ye ensure karega ki format_id backend tak pahunche
 
     if not url or not format_id:
-        return jsonify({"error": "URL and format required"}), 400
+        return jsonify({"error": "URL and Format required"}), 400
 
     video_id = str(int(time.time()))
     download_tasks[video_id] = {"status": "processing"}
