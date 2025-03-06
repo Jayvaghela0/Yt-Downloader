@@ -10,7 +10,7 @@ CORS(app)
 
 DOWNLOAD_FOLDER = "downloads"
 COOKIES_FILE = "cookies.txt"
-BACKEND_URL = "https://yt-downloader-e6db.onrender.com"  # ✅ Apna backend URL manually likho
+BACKEND_URL = "https://ytjbv.onrender.com"  # ✅ Apna backend URL manually yaha likho
 
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
@@ -31,10 +31,61 @@ def delete_after_delay(file_path, delay=300):
     except Exception as e:
         print(f"Error deleting file: {e}")
 
-def download_video_task(video_url, format_id, video_id):
+@app.route("/get_formats", methods=["GET"])
+def get_formats():
+    """YouTube video ki available qualities return karega"""
+    url = request.args.get("url")
+    if not url:
+        return jsonify({"error": "URL required"}), 400
+
     try:
         ydl_opts = {
-            "format": format_id,  # ✅ Ye ensure karega ki format_id use ho raha hai
+            "cookiefile": COOKIES_FILE,
+            "http_headers": HEADERS,
+            "quiet": True
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+
+        formats = []
+        for f in info.get("formats", []):
+            if f.get("vcodec") != "none" and f.get("acodec") == "none":  # ✅ Sirf video formats filter kiye
+                formats.append({
+                    "format_id": f["format_id"],
+                    "resolution": f.get("height", "Unknown"),
+                    "ext": f["ext"]
+                })
+
+        if not formats:
+            return jsonify({"error": "No video-only formats available"}), 404
+
+        return jsonify({"title": info["title"], "formats": formats})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/download", methods=["GET"])
+def start_download():
+    """Selected quality ka video download karega"""
+    url = request.args.get("url")
+    format_id = request.args.get("format_id")
+
+    if not url or not format_id:
+        return jsonify({"error": "URL and Format required"}), 400
+
+    video_id = str(int(time.time()))
+    download_tasks[video_id] = {"status": "processing"}
+
+    threading.Thread(target=download_video_task, args=(url, format_id, video_id)).start()
+
+    return jsonify({"task_id": video_id, "status": "started"})
+
+def download_video_task(video_url, format_id, video_id):
+    """Background me video download karega"""
+    try:
+        ydl_opts = {
+            "format": format_id,  # ✅ Yahan pe ab user-selected format download hoga
             "outtmpl": f"{DOWNLOAD_FOLDER}/%(title)s.%(ext)s",
             "cookiefile": COOKIES_FILE,
             "http_headers": HEADERS,
@@ -46,7 +97,7 @@ def download_video_task(video_url, format_id, video_id):
             file_path = ydl.prepare_filename(info)
 
         threading.Thread(target=delete_after_delay, args=(file_path, 300)).start()
-        
+
         download_tasks[video_id] = {
             "status": "completed",
             "title": info["title"],
@@ -55,47 +106,6 @@ def download_video_task(video_url, format_id, video_id):
 
     except Exception as e:
         download_tasks[video_id] = {"status": "failed", "error": str(e)}
-
-@app.route("/")
-def home():
-    return "YouTube Video Downloader is Running!"
-
-@app.route("/get_formats", methods=["GET"])
-def get_formats():
-    url = request.args.get("url")
-    if not url:
-        return jsonify({"error": "URL required"}), 400
-
-    try:
-        ydl_opts = {
-            "cookiefile": COOKIES_FILE,
-            "http_headers": HEADERS
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            formats = [
-                {"format_id": f["format_id"], "resolution": f.get("height", "Unknown"), "ext": f["ext"]}
-                for f in info.get("formats", []) if f.get("height")
-            ]
-        return jsonify({"formats": formats})
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/download", methods=["GET"])
-def start_download():
-    url = request.args.get("url")
-    format_id = request.args.get("format_id")  # ✅ Fix: Ye ensure karega ki format_id backend tak pahunche
-
-    if not url or not format_id:
-        return jsonify({"error": "URL and Format required"}), 400
-
-    video_id = str(int(time.time()))
-    download_tasks[video_id] = {"status": "processing"}
-
-    threading.Thread(target=download_video_task, args=(url, format_id, video_id)).start()
-
-    return jsonify({"task_id": video_id, "status": "started"})
 
 @app.route("/status/<task_id>")
 def check_status(task_id):
