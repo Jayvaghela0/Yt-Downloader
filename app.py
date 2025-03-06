@@ -10,7 +10,7 @@ CORS(app)
 
 DOWNLOAD_FOLDER = "downloads"
 COOKIES_FILE = "cookies.txt"
-BACKEND_URL = "https://yt-downloader-3pl3.onrender.com"  # ✅ Apna backend URL manually yaha likho
+BACKEND_URL = "https://ytjbv.onrender.com"  # ✅ Apna backend URL manually yaha likho
 
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
@@ -33,7 +33,7 @@ def delete_after_delay(file_path, delay=300):
 
 @app.route("/get_formats", methods=["GET"])
 def get_formats():
-    """Sirf 320p, 480p, 720p, aur 1080p MP4 formats return karega"""
+    """Sirf 320p, 480p, 720p, aur 1080p MP4 formats (Duplicate Remove)"""
     url = request.args.get("url")
     if not url:
         return jsonify({"error": "URL required"}), 400
@@ -50,19 +50,24 @@ def get_formats():
 
         allowed_resolutions = {320, 480, 720, 1080}  # ✅ Allowed resolutions
         allowed_ext = "mp4"  # ✅ Sirf MP4 allow karenge
+        unique_formats = {}  # ✅ Duplicate resolutions remove karne ke liye dictionary
 
-        formats = []
         for f in info.get("formats", []):
             resolution = f.get("height")
             ext = f.get("ext")
+            format_id = f.get("format_id")
 
             # ✅ Sirf allowed resolutions aur MP4 filter kar rahe hain
             if resolution in allowed_resolutions and ext == allowed_ext:
-                formats.append({
-                    "format_id": f["format_id"],
-                    "resolution": resolution,
-                    "ext": ext
-                })
+                if resolution not in unique_formats:  # ✅ Pehli baar jo milega wohi lenge
+                    unique_formats[resolution] = {
+                        "format_id": format_id,
+                        "resolution": resolution,
+                        "ext": ext
+                    }
+
+        # ✅ Final list unique resolutions ki
+        formats = list(unique_formats.values())
 
         if not formats:
             return jsonify({"error": "No supported formats found"}), 404
