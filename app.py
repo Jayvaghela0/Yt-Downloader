@@ -10,7 +10,7 @@ CORS(app)
 
 DOWNLOAD_FOLDER = "downloads"
 COOKIES_FILE = "cookies.txt"
-BACKEND_URL = "https://yt-downloader-e6db.onrender.com"  # ✅ Apna backend URL manually yaha likho
+BACKEND_URL = "https://ytjbv.onrender.com"  # ✅ Apna backend URL manually yaha likho
 
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
@@ -33,7 +33,7 @@ def delete_after_delay(file_path, delay=300):
 
 @app.route("/get_formats", methods=["GET"])
 def get_formats():
-    """YouTube video ki available qualities return karega"""
+    """Sirf 320p, 480p, 720p, aur 1080p MP4 formats return karega"""
     url = request.args.get("url")
     if not url:
         return jsonify({"error": "URL required"}), 400
@@ -48,17 +48,24 @@ def get_formats():
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
 
+        allowed_resolutions = {320, 480, 720, 1080}  # ✅ Allowed resolutions
+        allowed_ext = "mp4"  # ✅ Sirf MP4 allow karenge
+
         formats = []
         for f in info.get("formats", []):
-            if f.get("vcodec") != "none" and f.get("acodec") == "none":  # ✅ Sirf video formats filter kiye
+            resolution = f.get("height")
+            ext = f.get("ext")
+
+            # ✅ Sirf allowed resolutions aur MP4 filter kar rahe hain
+            if resolution in allowed_resolutions and ext == allowed_ext:
                 formats.append({
                     "format_id": f["format_id"],
-                    "resolution": f.get("height", "Unknown"),
-                    "ext": f["ext"]
+                    "resolution": resolution,
+                    "ext": ext
                 })
 
         if not formats:
-            return jsonify({"error": "No video-only formats available"}), 404
+            return jsonify({"error": "No supported formats found"}), 404
 
         return jsonify({"title": info["title"], "formats": formats})
 
