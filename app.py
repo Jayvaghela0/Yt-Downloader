@@ -9,7 +9,7 @@ import hashlib
 app = Flask(__name__)
 
 # Sirf Cloudflare Worker se requests allow karne ke liye
-ALLOWED_WORKER_URL = "https://your-cloudflare-worker.workers.dev"
+ALLOWED_WORKER_URL = "https://youtube.jayvaghela064.workers.dev/"
 
 def check_worker_access():
     """✅ Sirf Cloudflare Worker se aane wale requests allow karega"""
