@@ -8,46 +8,43 @@ import hashlib
 
 app = Flask(__name__)
 
-# ✅ Sirf tumhare Blogger domain se requests allow karne ke liye CORS set kiya
+# 🟢 CORS: Sirf tumhare Blogger domain se requests allow honge
 CORS(app, resources={r"/*": {"origins": "https://youtubevideodownloaderfullhdfree.blogspot.com"}})
 
+# 🟢 Configurations
 DOWNLOAD_FOLDER = "downloads"
 COOKIES_FILE = "cookies.txt"
 BACKEND_URL = "https://yt-downloader-3pl3.onrender.com"
 
+# Folder create karlo agar exist nahi karta
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
+# 🟢 Headers for yt-dlp
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept-Language": "en-US,en;q=0.9",
     "Referer": "https://www.youtube.com/",
 }
 
+# Active Download Tasks
 download_tasks = {}
-file_timestamps = {}
 
-def delete_after_delay(file_path, delay=180):  # ✅ 3-minute delete timer
+# ✅ Function: Sirf allowed domain se requests allow karega
+def is_valid_request():
+    referer = request.headers.get("Referer", "")
+    return referer.startswith("https://youtubevideodownloaderfullhdfree.blogspot.com")
+
+# ✅ Function: 3 minute baad file delete karne ka kaam karega
+def delete_after_delay(file_path, delay=180):
     time.sleep(delay)
     try:
         if os.path.exists(file_path):
             os.remove(file_path)
-            file_timestamps.pop(file_path, None)
             print(f"Deleted: {file_path}")
     except Exception as e:
         print(f"Error deleting file: {e}")
 
-def is_valid_request():
-    """✅ Sirf allowed domain se requests allow karega"""
-    referer = request.headers.get("Referer", "")
-    return referer.startswith("https://youtubevideodownloaderfullhdfree.blogspot.com")
-
-def get_next_filename():
-    """✅ Next available filename find karega (VIDEO1, VIDEO2, etc.)"""
-    existing_files = [f for f in os.listdir(DOWNLOAD_FOLDER) if f.startswith("VIDEO") and f.endswith(".mp4")]
-    existing_numbers = [int(f.replace("VIDEO", "").replace(".mp4", "")) for f in existing_files if f.replace("VIDEO", "").replace(".mp4", "").isdigit()]
-    next_number = max(existing_numbers) + 1 if existing_numbers else 1
-    return f"VIDEO{next_number}.mp4"
-
+# ✅ Route: Video ke available formats fetch karega
 @app.route("/get_formats", methods=["GET"])
 def get_formats():
     if not is_valid_request():
@@ -94,6 +91,7 @@ def get_formats():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ✅ Route: Video download request handle karega
 @app.route("/download", methods=["GET"])
 def start_download():
     if not is_valid_request():
@@ -105,17 +103,18 @@ def start_download():
     if not url or not format_id:
         return jsonify({"error": "URL and Format required"}), 400
 
-    file_name = get_next_filename()  # ✅ Unique file name generate karega
-    file_path = os.path.join(DOWNLOAD_FOLDER, file_name)
+    # Har baar naye naam ke liye unique hash generate karo
+    video_hash = hashlib.md5((url + format_id + str(time.time())).encode()).hexdigest()
+    file_path = os.path.join(DOWNLOAD_FOLDER, f"{video_hash}.mp4")
 
-    # ✅ Har baar naya download hoga (old file check nahi karega)
-    download_tasks[file_name] = {"status": "processing"}
-    threading.Thread(target=download_video_task, args=(url, format_id, file_name)).start()
+    # Har request par naya download shuru hoga
+    threading.Thread(target=download_video_task, args=(url, format_id, video_hash)).start()
 
-    return jsonify({"task_id": file_name, "status": "started"})
+    return jsonify({"task_id": video_hash, "status": "started"})
 
-def download_video_task(video_url, format_id, file_name):
-    file_path = os.path.join(DOWNLOAD_FOLDER, file_name)
+# ✅ Function: Video download karne ka actual kaam yeh karega
+def download_video_task(video_url, format_id, video_hash):
+    file_path = os.path.join(DOWNLOAD_FOLDER, f"{video_hash}.mp4")
 
     try:
         ydl_opts = {
@@ -127,19 +126,22 @@ def download_video_task(video_url, format_id, file_name):
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.extract_info(video_url, download=True)
+            info = ydl.extract_info(video_url, download=True)
 
-        file_timestamps[file_path] = time.time()
-        threading.Thread(target=delete_after_delay, args=(file_path, 180)).start()  # ✅ 3-minute delete timer
+        # ✅ File 3 minute ke baad delete ho jayegi
+        threading.Thread(target=delete_after_delay, args=(file_path, 180)).start()
 
-        download_tasks[file_name] = {
+        # ✅ Download ho gaya, ab frontend ko serve karne ke liye store karlo
+        download_tasks[video_hash] = {
             "status": "completed",
-            "download_link": f"{BACKEND_URL}/file/{file_name}"
+            "title": info["title"],
+            "download_link": f"{BACKEND_URL}/file/{os.path.basename(file_path)}"
         }
 
     except Exception as e:
-        download_tasks[file_name] = {"status": "failed", "error": str(e)}
+        download_tasks[video_hash] = {"status": "failed", "error": str(e)}
 
+# ✅ Route: Download status check karne ke liye
 @app.route("/status/<task_id>")
 def check_status(task_id):
     if not is_valid_request():
@@ -149,6 +151,7 @@ def check_status(task_id):
         return jsonify(download_tasks[task_id])
     return jsonify({"error": "Task not found"}), 404
 
+# ✅ Route: File serve karne ke liye
 @app.route("/file/<filename>")
 def serve_file(filename):
     if not is_valid_request():
