@@ -26,7 +26,7 @@ HEADERS = {
 download_tasks = {}
 file_timestamps = {}
 
-def delete_after_delay(file_path, delay=300):
+def delete_after_delay(file_path, delay=180):  # ✅ 3-minute delete timer
     time.sleep(delay)
     try:
         if os.path.exists(file_path):
@@ -41,11 +41,18 @@ def is_valid_request():
     referer = request.headers.get("Referer", "")
     return referer.startswith("https://youtubevideodownloaderfullhdfree.blogspot.com")
 
+def get_next_filename():
+    """✅ Next available filename find karega (VIDEO1, VIDEO2, etc.)"""
+    existing_files = [f for f in os.listdir(DOWNLOAD_FOLDER) if f.startswith("VIDEO") and f.endswith(".mp4")]
+    existing_numbers = [int(f.replace("VIDEO", "").replace(".mp4", "")) for f in existing_files if f.replace("VIDEO", "").replace(".mp4", "").isdigit()]
+    next_number = max(existing_numbers) + 1 if existing_numbers else 1
+    return f"VIDEO{next_number}.mp4"
+
 @app.route("/get_formats", methods=["GET"])
 def get_formats():
     if not is_valid_request():
         return jsonify({"error": "Unauthorized request"}), 403
-    
+
     url = request.args.get("url")
     if not url:
         return jsonify({"error": "URL required"}), 400
@@ -98,23 +105,17 @@ def start_download():
     if not url or not format_id:
         return jsonify({"error": "URL and Format required"}), 400
 
-    video_hash = hashlib.md5((url + format_id).encode()).hexdigest()
-    file_path = os.path.join(DOWNLOAD_FOLDER, f"{video_hash}.mp4")
+    file_name = get_next_filename()  # ✅ Unique file name generate karega
+    file_path = os.path.join(DOWNLOAD_FOLDER, file_name)
 
-    if file_path in file_timestamps and os.path.exists(file_path):
-        return jsonify({
-            "status": "completed",
-            "title": "Cached Video",
-            "download_link": f"{BACKEND_URL}/file/{os.path.basename(file_path)}"
-        })
+    # ✅ Har baar naya download hoga (old file check nahi karega)
+    download_tasks[file_name] = {"status": "processing"}
+    threading.Thread(target=download_video_task, args=(url, format_id, file_name)).start()
 
-    download_tasks[video_hash] = {"status": "processing"}
-    threading.Thread(target=download_video_task, args=(url, format_id, video_hash)).start()
+    return jsonify({"task_id": file_name, "status": "started"})
 
-    return jsonify({"task_id": video_hash, "status": "started"})
-
-def download_video_task(video_url, format_id, video_hash):
-    file_path = os.path.join(DOWNLOAD_FOLDER, f"{video_hash}.mp4")
+def download_video_task(video_url, format_id, file_name):
+    file_path = os.path.join(DOWNLOAD_FOLDER, file_name)
 
     try:
         ydl_opts = {
@@ -126,19 +127,18 @@ def download_video_task(video_url, format_id, video_hash):
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=True)
+            ydl.extract_info(video_url, download=True)
 
         file_timestamps[file_path] = time.time()
-        threading.Thread(target=delete_after_delay, args=(file_path, 300)).start()
+        threading.Thread(target=delete_after_delay, args=(file_path, 180)).start()  # ✅ 3-minute delete timer
 
-        download_tasks[video_hash] = {
+        download_tasks[file_name] = {
             "status": "completed",
-            "title": info["title"],
-            "download_link": f"{BACKEND_URL}/file/{os.path.basename(file_path)}"
+            "download_link": f"{BACKEND_URL}/file/{file_name}"
         }
 
     except Exception as e:
-        download_tasks[video_hash] = {"status": "failed", "error": str(e)}
+        download_tasks[file_name] = {"status": "failed", "error": str(e)}
 
 @app.route("/status/<task_id>")
 def check_status(task_id):
