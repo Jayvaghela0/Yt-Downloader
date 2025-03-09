@@ -8,20 +8,12 @@ import hashlib
 
 app = Flask(__name__)
 
-# Sirf Cloudflare Worker se requests allow karne ke liye
-ALLOWED_WORKER_URL = "https://youtube.jayvaghela064.workers.dev/"
-
-def check_worker_access():
-    """✅ Sirf Cloudflare Worker se aane wale requests allow karega"""
-    referer = request.headers.get("Referer")
-    if referer is None or not referer.startswith(ALLOWED_WORKER_URL):
-        return jsonify({"error": "Access Denied"}), 403
-
-app.before_request(check_worker_access)
+# ✅ Sirf tumhare Blogger domain se requests allow karne ke liye CORS set kiya
+CORS(app, resources={r"/*": {"origins": "https://youtubevideodownloaderfullhdfree.blogspot.com"}})
 
 DOWNLOAD_FOLDER = "downloads"
 COOKIES_FILE = "cookies.txt"
-BACKEND_URL = ALLOWED_WORKER_URL  # ✅ Backend URL ko Cloudflare Worker se replace kiya
+BACKEND_URL = "https://yt-downloader-3pl3.onrender.com"
 
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
@@ -35,7 +27,6 @@ download_tasks = {}
 file_timestamps = {}
 
 def delete_after_delay(file_path, delay=300):
-    """✅ 5 minute baad file delete karega"""
     time.sleep(delay)
     try:
         if os.path.exists(file_path):
@@ -45,9 +36,16 @@ def delete_after_delay(file_path, delay=300):
     except Exception as e:
         print(f"Error deleting file: {e}")
 
+def is_valid_request():
+    """✅ Sirf allowed domain se requests allow karega"""
+    referer = request.headers.get("Referer", "")
+    return referer.startswith("https://youtubevideodownloaderfullhdfree.blogspot.com")
+
 @app.route("/get_formats", methods=["GET"])
 def get_formats():
-    """✅ Sirf MP4 formats allow karega"""
+    if not is_valid_request():
+        return jsonify({"error": "Unauthorized request"}), 403
+    
     url = request.args.get("url")
     if not url:
         return jsonify({"error": "URL required"}), 400
@@ -91,7 +89,9 @@ def get_formats():
 
 @app.route("/download", methods=["GET"])
 def start_download():
-    """✅ Agar video available hai to wahi return karega"""
+    if not is_valid_request():
+        return jsonify({"error": "Unauthorized request"}), 403
+
     url = request.args.get("url")
     format_id = request.args.get("format_id")
 
@@ -114,7 +114,6 @@ def start_download():
     return jsonify({"task_id": video_hash, "status": "started"})
 
 def download_video_task(video_url, format_id, video_hash):
-    """✅ Background me video download karega"""
     file_path = os.path.join(DOWNLOAD_FOLDER, f"{video_hash}.mp4")
 
     try:
@@ -143,14 +142,18 @@ def download_video_task(video_url, format_id, video_hash):
 
 @app.route("/status/<task_id>")
 def check_status(task_id):
-    """✅ Task ka status check karega"""
+    if not is_valid_request():
+        return jsonify({"error": "Unauthorized request"}), 403
+
     if task_id in download_tasks:
         return jsonify(download_tasks[task_id])
     return jsonify({"error": "Task not found"}), 404
 
 @app.route("/file/<filename>")
 def serve_file(filename):
-    """✅ Downloaded file serve karega agar available hai"""
+    if not is_valid_request():
+        return jsonify({"error": "Unauthorized request"}), 403
+
     file_path = os.path.join(DOWNLOAD_FOLDER, filename)
     if os.path.exists(file_path):
         return send_file(file_path, as_attachment=True)
