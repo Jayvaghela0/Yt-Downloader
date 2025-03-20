@@ -8,10 +8,10 @@ import hashlib
 
 app = Flask(__name__)
 
-# 🟢 CORS: Sirf tumhare Blogger domain se requests allow honge
+# ✅ CORS: Sirf tumhare Blogger domain se requests allow honge
 CORS(app, resources={r"/*": {"origins": "https://youtubevideodownloaderfullhdfree.blogspot.com"}})
 
-# 🟢 Configurations
+# ✅ Configurations
 DOWNLOAD_FOLDER = "downloads"
 COOKIES_FILE = "cookies.txt"
 BACKEND_URL = "https://yt-downloader-3pl3.onrender.com"
@@ -19,14 +19,14 @@ BACKEND_URL = "https://yt-downloader-3pl3.onrender.com"
 # Folder create karlo agar exist nahi karta
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
-# 🟢 Headers for yt-dlp
+# ✅ Headers for yt-dlp
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept-Language": "en-US,en;q=0.9",
     "Referer": "https://www.youtube.com/",
 }
 
-# Active Download Tasks
+# ✅ Active Download Tasks
 download_tasks = {}
 
 # ✅ Function: Sirf allowed domain se requests allow karega
@@ -44,7 +44,7 @@ def delete_after_delay(file_path, delay=180):
     except Exception as e:
         print(f"Error deleting file: {e}")
 
-# ✅ Route: Video ke available formats fetch karega (Shorts + Long Videos)
+# ✅ Route: Video ke available formats fetch karega
 @app.route("/get_formats", methods=["GET"])
 def get_formats():
     if not is_valid_request():
@@ -64,21 +64,24 @@ def get_formats():
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
 
-        allowed_resolutions = {144, 240, 360, 480, 720, 1080}  # ✅ Shorts ke liye chhoti resolutions add ki hain
-        allowed_ext = "mp4"
+        allowed_resolutions = {240, 320, 480, 720, 1080, 1440}
+        allowed_ext = {"mp4", "webm"}
         unique_formats = {}
 
         for f in info.get("formats", []):
             resolution = f.get("height")
             ext = f.get("ext")
             format_id = f.get("format_id")
+            audio = f.get("acodec") != "none"
 
-            if resolution and resolution in allowed_resolutions and ext == allowed_ext:
-                if resolution not in unique_formats:
-                    unique_formats[resolution] = {
+            if resolution in allowed_resolutions and ext in allowed_ext:
+                key = f"{resolution}_{ext}"
+                if key not in unique_formats:
+                    unique_formats[key] = {
                         "format_id": format_id,
                         "resolution": resolution,
-                        "ext": ext
+                        "ext": ext,
+                        "audio": audio
                     }
 
         formats = list(unique_formats.values())
@@ -91,7 +94,7 @@ def get_formats():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ✅ Route: Video download request handle karega (Shorts + Long Videos)
+# ✅ Route: Video download request handle karega
 @app.route("/download", methods=["GET"])
 def start_download():
     if not is_valid_request():
@@ -103,16 +106,14 @@ def start_download():
     if not url or not format_id:
         return jsonify({"error": "URL and Format required"}), 400
 
-    # Har baar naye naam ke liye unique hash generate karo
     video_hash = hashlib.md5((url + format_id + str(time.time())).encode()).hexdigest()
     file_path = os.path.join(DOWNLOAD_FOLDER, f"{video_hash}.mp4")
 
-    # Har request par naya download shuru hoga
     threading.Thread(target=download_video_task, args=(url, format_id, video_hash)).start()
 
     return jsonify({"task_id": video_hash, "status": "started"})
 
-# ✅ Function: Video download karne ka actual kaam yeh karega (Shorts + Long Videos)
+# ✅ Function: Video download karega audio ke saath
 def download_video_task(video_url, format_id, video_hash):
     file_path = os.path.join(DOWNLOAD_FOLDER, f"{video_hash}.mp4")
 
@@ -128,10 +129,8 @@ def download_video_task(video_url, format_id, video_hash):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=True)
 
-        # ✅ File 3 minute ke baad delete ho jayegi
         threading.Thread(target=delete_after_delay, args=(file_path, 180)).start()
 
-        # ✅ Download ho gaya, ab frontend ko serve karne ke liye store karlo
         download_tasks[video_hash] = {
             "status": "completed",
             "title": info["title"],
@@ -141,22 +140,14 @@ def download_video_task(video_url, format_id, video_hash):
     except Exception as e:
         download_tasks[video_hash] = {"status": "failed", "error": str(e)}
 
-# ✅ Route: Download status check karne ke liye
+# ✅ Route: Status check
 @app.route("/status/<task_id>")
 def check_status(task_id):
-    if not is_valid_request():
-        return jsonify({"error": "Unauthorized request"}), 403
+    return jsonify(download_tasks.get(task_id, {"error": "Task not found"}))
 
-    if task_id in download_tasks:
-        return jsonify(download_tasks[task_id])
-    return jsonify({"error": "Task not found"}), 404
-
-# ✅ Route: File serve karne ke liye
+# ✅ Route: File serve karega
 @app.route("/file/<filename>")
 def serve_file(filename):
-    if not is_valid_request():
-        return jsonify({"error": "Unauthorized request"}), 403
-
     file_path = os.path.join(DOWNLOAD_FOLDER, filename)
     if os.path.exists(file_path):
         return send_file(file_path, as_attachment=True)
