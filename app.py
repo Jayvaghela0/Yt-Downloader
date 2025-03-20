@@ -44,7 +44,7 @@ def delete_after_delay(file_path, delay=180):
     except Exception as e:
         print(f"Error deleting file: {e}")
 
-# ✅ Route: Video ke available formats fetch karega
+# ✅ Route: Video ke available formats fetch karega (Shorts + Long Videos)
 @app.route("/get_formats", methods=["GET"])
 def get_formats():
     if not is_valid_request():
@@ -64,7 +64,7 @@ def get_formats():
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
 
-        allowed_resolutions = {320, 480, 720, 1080}
+        allowed_resolutions = {144, 240, 360, 480, 720, 1080}  # ✅ Shorts ke liye chhoti resolutions add ki hain
         allowed_ext = "mp4"
         unique_formats = {}
 
@@ -73,7 +73,7 @@ def get_formats():
             ext = f.get("ext")
             format_id = f.get("format_id")
 
-            if resolution in allowed_resolutions and ext == allowed_ext:
+            if resolution and resolution in allowed_resolutions and ext == allowed_ext:
                 if resolution not in unique_formats:
                     unique_formats[resolution] = {
                         "format_id": format_id,
@@ -91,7 +91,7 @@ def get_formats():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ✅ Route: Video download request handle karega
+# ✅ Route: Video download request handle karega (Shorts + Long Videos)
 @app.route("/download", methods=["GET"])
 def start_download():
     if not is_valid_request():
@@ -112,7 +112,7 @@ def start_download():
 
     return jsonify({"task_id": video_hash, "status": "started"})
 
-# ✅ Function: Video download karne ka actual kaam yeh karega
+# ✅ Function: Video download karne ka actual kaam yeh karega (Shorts + Long Videos)
 def download_video_task(video_url, format_id, video_hash):
     file_path = os.path.join(DOWNLOAD_FOLDER, f"{video_hash}.mp4")
 
