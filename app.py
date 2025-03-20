@@ -8,10 +8,10 @@ import hashlib
 
 app = Flask(__name__)
 
-# ✅ CORS: Sirf tumhare Blogger domain se requests allow honge
+# 🟢 CORS: Sirf tumhare Blogger domain se requests allow honge
 CORS(app, resources={r"/*": {"origins": "https://youtubevideodownloaderfullhdfree.blogspot.com"}})
 
-# ✅ Configurations
+# 🟢 Configurations
 DOWNLOAD_FOLDER = "downloads"
 COOKIES_FILE = "cookies.txt"
 BACKEND_URL = "https://yt-downloader-3pl3.onrender.com"
@@ -19,14 +19,14 @@ BACKEND_URL = "https://yt-downloader-3pl3.onrender.com"
 # Folder create karlo agar exist nahi karta
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
-# ✅ Headers for yt-dlp
+# 🟢 Headers for yt-dlp
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept-Language": "en-US,en;q=0.9",
     "Referer": "https://www.youtube.com/",
 }
 
-# ✅ Active Download Tasks
+# Active Download Tasks
 download_tasks = {}
 
 # ✅ Function: Sirf allowed domain se requests allow karega
@@ -72,19 +72,23 @@ def get_formats():
             resolution = f.get("height")
             ext = f.get("ext")
             format_id = f.get("format_id")
-            audio = f.get("acodec") != "none"
+            has_audio = f.get("acodec") != "none"  # Audio available or not
 
+            # ✅ Sirf allowed resolutions aur formats ko allow karo
             if resolution in allowed_resolutions and ext in allowed_ext:
                 key = f"{resolution}_{ext}"
-                if key not in unique_formats:
+                
+                # ✅ Duplicate ko avoid karo, lekin agar audio available hai to prefer karo
+                if key not in unique_formats or (not unique_formats[key]['has_audio'] and has_audio):
                     unique_formats[key] = {
                         "format_id": format_id,
                         "resolution": resolution,
                         "ext": ext,
-                        "audio": audio
+                        "has_audio": has_audio
                     }
 
-        formats = list(unique_formats.values())
+        # ✅ Sorting: Resolution ke order me show karo
+        formats = sorted(unique_formats.values(), key=lambda x: x["resolution"])
 
         if not formats:
             return jsonify({"error": "No supported formats found"}), 404
@@ -106,31 +110,36 @@ def start_download():
     if not url or not format_id:
         return jsonify({"error": "URL and Format required"}), 400
 
+    # ✅ Har baar naye naam ke liye unique hash generate karo
     video_hash = hashlib.md5((url + format_id + str(time.time())).encode()).hexdigest()
     file_path = os.path.join(DOWNLOAD_FOLDER, f"{video_hash}.mp4")
 
+    # ✅ Har request par naya download shuru hoga
     threading.Thread(target=download_video_task, args=(url, format_id, video_hash)).start()
 
     return jsonify({"task_id": video_hash, "status": "started"})
 
-# ✅ Function: Video download karega audio ke saath
+# ✅ Function: Video download karne ka actual kaam yeh karega
 def download_video_task(video_url, format_id, video_hash):
     file_path = os.path.join(DOWNLOAD_FOLDER, f"{video_hash}.mp4")
 
     try:
         ydl_opts = {
-            "format": format_id,
+            "format": f"{format_id}+bestaudio/best",  # ✅ Audio + Video combine karega
             "outtmpl": file_path,
             "cookiefile": COOKIES_FILE,
             "http_headers": HEADERS,
-            "noprogress": True
+            "noprogress": True,
+            "merge_output_format": "mp4",  # ✅ Audio + Video merge karega bina ffmpeg ke
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=True)
 
+        # ✅ File 3 minute ke baad delete ho jayegi
         threading.Thread(target=delete_after_delay, args=(file_path, 180)).start()
 
+        # ✅ Download ho gaya, ab frontend ko serve karne ke liye store karlo
         download_tasks[video_hash] = {
             "status": "completed",
             "title": info["title"],
@@ -140,14 +149,12 @@ def download_video_task(video_url, format_id, video_hash):
     except Exception as e:
         download_tasks[video_hash] = {"status": "failed", "error": str(e)}
 
-# ✅ Route: Status check
-@app.route("/status/<task_id>")
-def check_status(task_id):
-    return jsonify(download_tasks.get(task_id, {"error": "Task not found"}))
-
-# ✅ Route: File serve karega
+# ✅ Route: File serve karne ke liye
 @app.route("/file/<filename>")
 def serve_file(filename):
+    if not is_valid_request():
+        return jsonify({"error": "Unauthorized request"}), 403
+
     file_path = os.path.join(DOWNLOAD_FOLDER, filename)
     if os.path.exists(file_path):
         return send_file(file_path, as_attachment=True)
