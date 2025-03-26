@@ -8,7 +8,7 @@ import hashlib
 
 app = Flask(__name__)
 
-# ✅ CORS: Sirf tumhare Blogger domain se requests allow honge
+# ✅ Sirf Blogger domain allow hoga
 CORS(app, resources={r"/*": {"origins": "https://youtubevideodownloaderfullhdfree.blogspot.com"}})
 
 # ✅ Configurations
@@ -16,7 +16,7 @@ DOWNLOAD_FOLDER = "downloads"
 COOKIES_FILE = "cookies.txt"
 BACKEND_URL = "https://yt-downloader-3pl3.onrender.com"
 
-# Folder create karlo agar exist nahi karta
+# Folder create kar lo agar exist nahi karta
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
 # ✅ Headers for yt-dlp
@@ -72,9 +72,10 @@ def get_formats():
             resolution = f.get("height")
             ext = f.get("ext")
             vcodec = f.get("vcodec")
+            acodec = f.get("acodec")
 
-            # ✅ Sirf mp4 aur video-only formats allow karo
-            if resolution in allowed_resolutions and ext == allowed_ext and vcodec != "none":
+            # ✅ Sirf mp4 aur video-only formats allow karo (audio nahi hoga)
+            if resolution in allowed_resolutions and ext == allowed_ext and vcodec != "none" and acodec == "none":
                 if resolution not in unique_formats:
                     unique_formats[resolution] = {
                         "format_id": f.get("format_id"),
@@ -123,11 +124,7 @@ def download_video_task(video_url, format_id, video_hash):
             "outtmpl": file_path,
             "cookiefile": COOKIES_FILE,
             "http_headers": HEADERS,
-            "noprogress": True,
-            "postprocessors": [{
-                "key": "FFmpegVideoConvertor",
-                "preferedformat": "mp4",
-            }]
+            "noprogress": True
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
