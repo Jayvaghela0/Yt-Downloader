@@ -16,7 +16,7 @@ DOWNLOAD_FOLDER = "downloads"
 COOKIES_FILE = "cookies.txt"
 BACKEND_URL = "https://yt-downloader-3pl3.onrender.com"
 
-# Folder create kar lo agar exist nahi karta
+# Folder create karo agar nahi hai
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
 # ✅ Headers for yt-dlp
@@ -26,15 +26,15 @@ HEADERS = {
     "Referer": "https://www.youtube.com/",
 }
 
-# Active Download Tasks
+# Active download tasks
 download_tasks = {}
 
-# ✅ Sirf allowed domain se requests allow karega
+# ✅ Sirf allowed domain se request allow
 def is_valid_request():
     referer = request.headers.get("Referer", "")
     return referer.startswith("https://youtubevideodownloaderfullhdfree.blogspot.com")
 
-# ✅ 3 minute ke baad file delete karne ka kaam karega
+# ✅ 3 minute baad file delete karne ka kaam
 def delete_after_delay(file_path, delay=180):
     time.sleep(delay)
     try:
@@ -44,7 +44,7 @@ def delete_after_delay(file_path, delay=180):
     except Exception as e:
         print(f"Error deleting file: {e}")
 
-# ✅ Route: Video ke available formats fetch karega
+# ✅ Route: Get video-only formats
 @app.route("/get_formats", methods=["GET"])
 def get_formats():
     if not is_valid_request():
@@ -65,7 +65,7 @@ def get_formats():
             info = ydl.extract_info(url, download=False)
 
         allowed_resolutions = {144, 240, 360, 480, 720, 1080, 1440}
-        allowed_ext = "mp4"
+        allowed_exts = {"mp4", "webm"}  # ✅ mp4 + webm allowed
         unique_formats = {}
 
         for f in info.get("formats", []):
@@ -74,8 +74,7 @@ def get_formats():
             vcodec = f.get("vcodec")
             acodec = f.get("acodec")
 
-            # ✅ Sirf mp4 aur video-only formats allow karo (audio nahi hoga)
-            if resolution in allowed_resolutions and ext == allowed_ext and vcodec != "none" and acodec == "none":
+            if resolution in allowed_resolutions and ext in allowed_exts and vcodec != "none" and acodec == "none":
                 if resolution not in unique_formats:
                     unique_formats[resolution] = {
                         "format_id": f.get("format_id"),
@@ -93,7 +92,7 @@ def get_formats():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ✅ Route: Video download request handle karega
+# ✅ Route: Start download
 @app.route("/download", methods=["GET"])
 def start_download():
     if not is_valid_request():
@@ -105,16 +104,14 @@ def start_download():
     if not url or not format_id:
         return jsonify({"error": "URL and Format required"}), 400
 
-    # ✅ Har request ke liye unique filename create karo
     video_hash = hashlib.md5((url + format_id + str(time.time())).encode()).hexdigest()
     file_path = os.path.join(DOWNLOAD_FOLDER, f"{video_hash}.mp4")
 
-    # ✅ Naye thread par download shuru karo
     threading.Thread(target=download_video_task, args=(url, format_id, video_hash)).start()
 
     return jsonify({"task_id": video_hash, "status": "started"})
 
-# ✅ Function: Video download karne ka actual kaam yeh karega
+# ✅ Function: Download video-only
 def download_video_task(video_url, format_id, video_hash):
     file_path = os.path.join(DOWNLOAD_FOLDER, f"{video_hash}.mp4")
 
@@ -130,10 +127,8 @@ def download_video_task(video_url, format_id, video_hash):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=True)
 
-        # ✅ File 3 minute ke baad delete ho jayegi
         threading.Thread(target=delete_after_delay, args=(file_path, 180)).start()
 
-        # ✅ Download complete hone ke baad frontend ko serve karo
         download_tasks[video_hash] = {
             "status": "completed",
             "title": info["title"],
@@ -141,9 +136,10 @@ def download_video_task(video_url, format_id, video_hash):
         }
 
     except Exception as e:
+        print(f"Download error: {e}")
         download_tasks[video_hash] = {"status": "failed", "error": str(e)}
 
-# ✅ Route: Download status check karne ke liye
+# ✅ Route: Check status
 @app.route("/status/<task_id>")
 def check_status(task_id):
     if not is_valid_request():
@@ -153,7 +149,7 @@ def check_status(task_id):
         return jsonify(download_tasks[task_id])
     return jsonify({"error": "Task not found"}), 404
 
-# ✅ Route: File serve karne ke liye
+# ✅ Route: Serve file
 @app.route("/file/<filename>")
 def serve_file(filename):
     if not is_valid_request():
